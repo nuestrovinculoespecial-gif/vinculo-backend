@@ -2,7 +2,7 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { WebBundlr } from "@bundlr-network/client";
+import Bundlr from "@bundlr-network/client";
 import { ethers } from "ethers";
 
 const app = express();
