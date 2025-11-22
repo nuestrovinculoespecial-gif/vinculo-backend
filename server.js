@@ -31,6 +31,7 @@ const cards = {
 let bundlr;
 
 // Inicializar Bundlr al arrancar
+
 async function initBundlr() {
   try {
     const privateKey = process.env.PRIVATE_KEY;
@@ -50,7 +51,7 @@ async function initBundlr() {
     const bundlrNode = "https://node1.bundlr.network";
     const currency = "matic"; // moneda con la que pagas (por ejemplo, MATIC en Polygon)
 
-    bundlr = new WebBundlr(bundlrNode, currency, wallet, {
+    bundlr = new Bundlr(bundlrNode, currency, wallet, {
       providerUrl: rpcUrl,
     });
 
