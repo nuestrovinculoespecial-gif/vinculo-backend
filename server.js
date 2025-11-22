@@ -1,80 +1,3 @@
-import express from "express";
-import cors from "cors";
-import multer from "multer";
-
-const app = express();
-app.use(cors());
-
-// Para recibir archivos (aunque en esta versión de prueba no los guardamos aún)
-const upload = multer({ storage: multer.memoryStorage() });
-
-// Nuestra “mini base de datos” en memoria,
-// equivalente a tu cards.json de pruebas.
-const URL_INICIAL_DEFECTO = "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4";
-
-const cards = {
-  "DEMO": {
-    initialVideoUrl: URL_INICIAL_DEFECTO,
-    finalVideoUrl: null
-  },
-  "FAMILIA-1": {
-    initialVideoUrl: URL_INICIAL_DEFECTO,
-    finalVideoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-  }
-};
-
-// GET /card/:cardId → devuelve la info de la tarjeta
-app.get("/card/:cardId", (req, res) => {
-  const { cardId } = req.params;
-  const datos = cards[cardId];
-
-  if (!datos) {
-    // Si la tarjeta no existe, devolvemos algo razonable
-    return res.json({
-      cardId,
-      initialVideoUrl: URL_INICIAL_DEFECTO,
-      finalVideoUrl: null,
-      registered: false
-    });
-  }
-
-  res.json({
-    cardId,
-    initialVideoUrl: datos.initialVideoUrl || URL_INICIAL_DEFECTO,
-    finalVideoUrl: datos.finalVideoUrl,
-    registered: true
-  });
-});
-
-// POST /card/:cardId/upload → de momento NO guarda el vídeo de verdad,
-// solo simula que sube algo y devuelve una URL falsa.
-app.post("/card/:cardId/upload", upload.single("video"), (req, res) => {
-  const { cardId } = req.params;
-
-  // En la versión real, aquí leeríamos req.file, lo subiríamos a Arweave
-  // y obtendríamos una URL real. De momento, simulamos:
-  const fakeUrl = "https://example.com/video/" + Date.now();
-
-  // Si no existía la tarjeta, la creamos
-  if (!cards[cardId]) {
-    cards[cardId] = {
-      initialVideoUrl: URL_INICIAL_DEFECTO,
-      finalVideoUrl: fakeUrl
-    };
-  } else {
-    cards[cardId].finalVideoUrl = fakeUrl;
-  }
-
-  console.log("Simulamos guardar vídeo para", cardId, "en", fakeUrl);
-
-  res.json({ videoUrl: fakeUrl });
-});
-
-// Arrancar servidor (Render/Vercel usarán este puerto)
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Servidor Vínculo escuchando en el puerto", PORT);
-});
 // server.js
 import express from "express";
 import cors from "cors";
@@ -93,7 +16,6 @@ const URL_INICIAL_DEFECTO =
   "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4";
 
 // “Mini base de datos” en memoria (para pruebas)
-// Más adelante esto debería ir a una base de datos real.
 const cards = {
   DEMO: {
     initialVideoUrl: URL_INICIAL_DEFECTO,
@@ -108,7 +30,7 @@ const cards = {
 
 let bundlr;
 
-// Inicializar Bundlr al arrancar el servidor
+// Inicializar Bundlr al arrancar
 async function initBundlr() {
   try {
     const privateKey = process.env.PRIVATE_KEY;
@@ -124,12 +46,9 @@ async function initBundlr() {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const wallet = new ethers.Wallet(privateKey, provider);
 
-    // Nodo de Bundlr:
-    // - Para PRUEBAS podrías usar "https://devnet.bundlr.network" (ejemplo)
-    // - Para PRODUCCIÓN, un nodo mainnet, por ejemplo:
-    const bundlrNode = "https://node1.bundlr.network"; // mainnet
-
-    const currency = "matic"; // o la moneda que uses para pagar (matic en Polygon)
+    // Nodo Bundlr (ejemplo mainnet)
+    const bundlrNode = "https://node1.bundlr.network";
+    const currency = "matic"; // moneda con la que pagas (por ejemplo, MATIC en Polygon)
 
     bundlr = new WebBundlr(bundlrNode, currency, wallet, {
       providerUrl: rpcUrl,
@@ -143,13 +62,12 @@ async function initBundlr() {
   }
 }
 
-// GET /card/:cardId → devuelve info de la tarjeta
+// GET /card/:cardId → info de la tarjeta
 app.get("/card/:cardId", (req, res) => {
   const { cardId } = req.params;
   const datos = cards[cardId];
 
   if (!datos) {
-    // Tarjeta no registrada aún
     return res.json({
       cardId,
       initialVideoUrl: URL_INICIAL_DEFECTO,
@@ -166,7 +84,7 @@ app.get("/card/:cardId", (req, res) => {
   });
 });
 
-// POST /card/:cardId/upload → recibe un vídeo y lo sube a Arweave
+// POST /card/:cardId/upload → recibe vídeo y lo sube a Arweave
 app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
   try {
     const { cardId } = req.params;
@@ -183,24 +101,22 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
     }
 
     const data = req.file.buffer;
-
     console.log(
-      "📹 Recibido vídeo para cardId:",
+      "📹 Recibido vídeo para",
       cardId,
-      "Tamaño:",
+      "tamaño",
       data.length,
       "bytes"
     );
 
-    // OPCIONAL: ver precio estimado
+    // Precio estimado (opcional)
     const price = await bundlr.getPrice(data.length);
-    console.log("💰 Precio aproximado del almacenamiento:", price.toString());
+    console.log("💰 Precio aproximado:", price.toString());
 
-    // Aquí podrías comprobar que tienes suficiente saldo en Bundlr.
-    // Si no, deberías fundear la cuenta una vez:
+    // Si es necesario, fundear Bundlr una vez:
     // await bundlr.fund(price);
 
-    // Subimos el vídeo a Bundlr/Arweave
+    // Subir a Arweave
     const tx = await bundlr.upload(data, {
       tags: [{ name: "Content-Type", value: "video/mp4" }],
     });
@@ -208,7 +124,6 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
     const videoUrl = `https://arweave.net/${tx.id}`;
     console.log("✅ Vídeo subido a Arweave:", videoUrl);
 
-    // Guardamos la URL en nuestra “base de datos” en memoria
     if (!cards[cardId]) {
       cards[cardId] = {
         initialVideoUrl: URL_INICIAL_DEFECTO,
