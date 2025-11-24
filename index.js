@@ -1,8 +1,7 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import pkg from "@bundlr-network/client";
-import { JsonRpcProvider, Wallet } from "ethers";
+import Bundlr from "@bundlr-network/client";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import fs from "fs/promises";
@@ -33,16 +32,16 @@ async function getBundlr() {
   }
 
   // Ethers v6: usamos JsonRpcProvider y Wallet directamente
-  const provider = new JsonRpcProvider(rpcUrl);
-  const wallet = new Wallet(privateKey, provider);
+ 
 
-  const bundlr = new WebBundlr(
+  const bundlr = new Bundlr(
     "https://node1.bundlr.network",
     "matic",
-    wallet
+    privateKey,
+	rpcUrl ? { providerUrl: rpcUrl } : undefined
   );
 
-  await bundlr.ready();
+  
   return bundlr;
 }
 // GET /card/:cardId  → info para index1.html
@@ -93,13 +92,13 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
       const diff = price.minus(balance).multipliedBy(1.1);
       await bundlr.fund(diff);
     }
-
+console.log("Subiendo a Arweave...");
     const tx = await bundlr.upload(data, {
       tags: [{ name: "Content-Type", value: "video/mp4" }],
     });
 
     const videoUrl = `https://arweave.net/${tx.id}`;
-
+console.log("Vídeo subido. URL:", videoUrl);
     // Guardar en Supabase (upsert por card_id)
     const { error } = await supabase
       .from("cards")
