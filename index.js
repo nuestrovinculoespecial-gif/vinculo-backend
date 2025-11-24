@@ -2,12 +2,12 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import pkg from "@bundlr-network/client";
-import { ethers } from "ethers";
+import { JsonRpcProvider, Wallet } from "ethers";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import fs from "fs/promises";
 
-const { WebBundlr } = pkg; // 👈 aquí sacamos WebBundlr del paquete
+const { WebBundlr } = pkg;
 
 dotenv.config();
 
@@ -24,11 +24,17 @@ const supabase = createClient(
 
 // Crear instancia de Bundlr con wallet del servidor
 async function getBundlr() {
-  const provider = new ethers.providers.JsonRpcProvider(
-    process.env.POLYGON_RPC_URL
-  );
+  const rpcUrl = process.env.POLYGON_RPC_URL;
+  const privateKey = process.env.PRIVATE_KEY;
 
-  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+  if (!rpcUrl || !privateKey) {
+    console.warn("Falta PRIVATE_KEY o POLYGON_RPC_URL en las variables de entorno.");
+    throw new Error("Config incompleta para Bundlr");
+  }
+
+  // Ethers v6: usamos JsonRpcProvider y Wallet directamente
+  const provider = new JsonRpcProvider(rpcUrl);
+  const wallet = new Wallet(privateKey, provider);
 
   const bundlr = new WebBundlr(
     "https://node1.bundlr.network",
@@ -39,8 +45,6 @@ async function getBundlr() {
   await bundlr.ready();
   return bundlr;
 }
-
-
 // GET /card/:cardId  → info para index1.html
 app.get("/card/:cardId", async (req, res) => {
   const cardId = req.params.cardId;
