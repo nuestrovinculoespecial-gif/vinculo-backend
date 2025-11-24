@@ -1,11 +1,13 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { WebBundlr } from "@bundlr-network/client";
+import pkg from "@bundlr-network/client";
 import { ethers } from "ethers";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import fs from "fs/promises";
+
+const { WebBundlr } = pkg; // 👈 aquí sacamos WebBundlr del paquete
 
 dotenv.config();
 
@@ -37,6 +39,7 @@ async function getBundlr() {
   await bundlr.ready();
   return bundlr;
 }
+
 
 // GET /card/:cardId  → info para index1.html
 app.get("/card/:cardId", async (req, res) => {
