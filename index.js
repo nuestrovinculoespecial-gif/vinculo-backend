@@ -1,12 +1,11 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import Bundlr from "@bundlr-network/client";
-import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
 import fs from "fs/promises";
-
-const { WebBundlr } = pkg;
+import dotenv from "dotenv";
+import { ethers } from "ethers";
+import { WebBundlr } from "@bundlr-network/client";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -15,36 +14,37 @@ app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-// Supabase (usa la SERVICE KEY, no la anon)
+// ----------------------
+// SUPABASE
+// ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Crear instancia de Bundlr con wallet del servidor
+// ----------------------
+// BUNDLR: crear conexión correcta
+// ----------------------
 async function getBundlr() {
-  const rpcUrl = process.env.POLYGON_RPC_URL;
-  const privateKey = process.env.PRIVATE_KEY;
-
-  if (!rpcUrl || !privateKey) {
-    console.warn("Falta PRIVATE_KEY o POLYGON_RPC_URL en las variables de entorno.");
-    throw new Error("Config incompleta para Bundlr");
-  }
-
-  // Ethers v6: usamos JsonRpcProvider y Wallet directamente
- 
-
-  const bundlr = new Bundlr(
-    "https://node1.bundlr.network",
-    "matic",
-    privateKey,
-	rpcUrl ? { providerUrl: rpcUrl } : undefined
+  const provider = new ethers.providers.JsonRpcProvider(
+    process.env.POLYGON_RPC_URL
   );
 
-  
+  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+
+  const bundlr = new WebBundlr(
+    "https://node1.bundlr.network",
+    "matic",
+    wallet
+  );
+
+  await bundlr.ready();
   return bundlr;
 }
-// GET /card/:cardId  → info para index1.html
+
+// ----------------------
+// GET card → devuelve urls
+// ----------------------
 app.get("/card/:cardId", async (req, res) => {
   const cardId = req.params.cardId;
 
@@ -54,35 +54,28 @@ app.get("/card/:cardId", async (req, res) => {
     .eq("card_id", cardId)
     .maybeSingle();
 
-  if (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Error leyendo Supabase" });
-  }
-
-  const finalVideoUrl = data?.video_url || "";
-  const initialVideoUrl =
-    "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4";
+  if (error) return res.status(500).json({ error: "Error leyendo Supabase" });
 
   res.json({
     cardId,
-    initialVideoUrl,
-    finalVideoUrl,
+    initialVideoUrl:
+      "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4",
+    finalVideoUrl: data?.video_url || "",
   });
 });
 
-// POST /card/:cardId/upload  → subir vídeo a Arweave y guardar URL
+// ----------------------
+// POST subir vídeo
+// ----------------------
 app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
   const cardId = req.params.cardId;
   const file = req.file;
 
-  if (!file) {
-    return res.status(400).json({ error: "No se ha enviado archivo" });
-  }
+  if (!file) return res.status(400).json({ error: "No se ha enviado archivo" });
 
   try {
     const bundlr = await getBundlr();
 
-    // Leer archivo en memoria
     const data = await fs.readFile(file.path);
 
     const price = await bundlr.getPrice(data.length);
@@ -92,41 +85,25 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
       const diff = price.minus(balance).multipliedBy(1.1);
       await bundlr.fund(diff);
     }
-console.log("Subiendo a Arweave...");
+
     const tx = await bundlr.upload(data, {
       tags: [{ name: "Content-Type", value: "video/mp4" }],
     });
 
     const videoUrl = `https://arweave.net/${tx.id}`;
-console.log("Vídeo subido. URL:", videoUrl);
-    // Guardar en Supabase (upsert por card_id)
-    const { error } = await supabase
-      .from("cards")
-      .upsert(
-        { card_id: cardId, video_url: videoUrl },
-        { onConflict: "card_id" }
-      );
 
-    if (error) {
-      console.error(error);
-      return res
-        .status(500)
-        .json({ error: "Subido a Arweave, pero error guardando en Supabase" });
-    }
+    await supabase
+      .from("cards")
+      .upsert({ card_id: cardId, video_url: videoUrl }, { onConflict: "card_id" });
 
     res.json({ videoUrl });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Error subiendo a Arweave" });
   } finally {
-    // borrar archivo temporal
-    if (req.file?.path) {
-      await fs.unlink(req.file.path).catch(() => {});
-    }
+    if (file?.path) await fs.unlink(file.path).catch(() => {});
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Backend Vinculo escuchando en puerto", PORT);
-});
+app.listen(PORT, () => console.log("Backend Vinculo escuchando en puerto", PORT));
