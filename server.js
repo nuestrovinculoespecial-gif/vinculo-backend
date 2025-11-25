@@ -1,151 +1,186 @@
-// server.js
+// index.js  (backend Vinculo)
+
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import Bundlr from "@bundlr-network/client";
-import { ethers } from "ethers";
+import fs from "fs/promises";
+import dotenv from "dotenv";
+import BundlrImport from "@bundlr-network/client";
+import { createClient } from "@supabase/supabase-js";
 
+dotenv.config();
+
+// Bundlr (el paquete es CommonJS; sacamos el default bien en ESM)
+const Bundlr = BundlrImport.default ?? BundlrImport;
+
+// -------------------------
+// CONFIG BÁSICA
+// -------------------------
 const app = express();
 app.use(cors());
 
-// Para recibir archivos de vídeo
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ dest: "uploads/" });
 
-// Vídeo inicial por defecto (el de la niña en tu GitHub)
 const URL_INICIAL_DEFECTO =
   "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4";
 
-// “Mini base de datos” en memoria (para pruebas)
-const cards = {
-  DEMO: {
-    initialVideoUrl: URL_INICIAL_DEFECTO,
-    finalVideoUrl: null,
-  },
-  "FAMILIA-1": {
-    initialVideoUrl: URL_INICIAL_DEFECTO,
-    finalVideoUrl:
-      "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-  },
-};
+// -------------------------
+// SUPABASE
+// -------------------------
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error("⚠️ Falta SUPABASE_URL o SUPABASE_SERVICE_KEY en las variables de entorno");
+}
 
-let bundlr;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
-// Inicializar Bundlr al arrancar
+// -------------------------
+// BUNDLR NODE
+// -------------------------
 
-async function initBundlr() {
-  try {
+let bundlrPromise = null;
+
+async function getBundlr() {
+  if (bundlrPromise) return bundlrPromise;
+
+  bundlrPromise = (async () => {
     const privateKey = process.env.PRIVATE_KEY;
     const rpcUrl = process.env.POLYGON_RPC_URL;
 
-    if (!privateKey || !rpcUrl) {
-      console.warn(
-        "⚠️ Falta PRIVATE_KEY o RPC_URL en las variables de entorno. Bundlr no se inicializará."
-      );
-      return;
+    if (!privateKey) {
+      console.error("⚠️ Falta PRIVATE_KEY en las variables de entorno");
+      throw new Error("PRIVATE_KEY no configurada");
     }
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const wallet = new ethers.Wallet(privateKey, provider);
+    const nodeUrl = "https://node1.bundlr.network";
+    const currency = "matic";
 
-    // Nodo Bundlr (ejemplo mainnet)
-    const bundlrNode = "https://node1.bundlr.network";
-    const currency = "matic"; // moneda con la que pagas (por ejemplo, MATIC en Polygon)
+    const config = {};
+   if (rpcUrl) {
+     config.providerUrl = rpcUrl;
+    }
 
-    bundlr = new Bundlr(bundlrNode, currency, wallet, {
-      providerUrl: rpcUrl,
-    });
+    const bundlr = new Bundlr(nodeUrl, currency, privateKey, config);
 
     await bundlr.ready();
-    console.log("✅ Bundlr inicializado correctamente");
-  } catch (err) {
-    console.error("❌ Error al inicializar Bundlr:", err);
-    bundlr = null;
-  }
+    console.log("✅ Bundlr listo. Dirección:", bundlr.address);
+    return bundlr;
+  })();
+
+  return bundlrPromise;
 }
 
-// GET /card/:cardId → info de la tarjeta
-app.get("/card/:cardId", (req, res) => {
-  const { cardId } = req.params;
-  const datos = cards[cardId];
+// -------------------------
+// RUTA: GET /card/:cardId
+// -------------------------
+app.get("/card/:cardId", async (req, res) => {
+  const cardId = req.params.cardId;
 
-  if (!datos) {
-    return res.json({
-      cardId,
-      initialVideoUrl: URL_INICIAL_DEFECTO,
-      finalVideoUrl: null,
-      registered: false,
-    });
-  }
-
-  res.json({
-    cardId,
-    initialVideoUrl: datos.initialVideoUrl || URL_INICIAL_DEFECTO,
-    finalVideoUrl: datos.finalVideoUrl,
-    registered: true,
-  });
-});
-
-// POST /card/:cardId/upload → recibe vídeo y lo sube a Arweave
-app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
   try {
-    const { cardId } = req.params;
+    const { data, error } = await supabase
+      .from("cards")
+      .select("video_url")
+      .eq("card_id", cardId)
+      .maybeSingle();
 
-    if (!req.file) {
-      return res.status(400).json({ error: "No se recibió ningún vídeo" });
+    if (error) {
+      console.error("Error leyendo Supabase:", error);
+      return res.status(500).json({ error: "Error leyendo Supabase" });
     }
 
-    if (!bundlr) {
+    const finalVideoUrl = data?.video_url || "";
+
+    res.json({
+      cardId,
+      initialVideoUrl: URL_INICIAL_DEFECTO,
+      finalVideoUrl,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Error interno en /card" });
+  }
+});
+
+// -------------------------
+// RUTA: POST /card/:cardId/upload
+// -------------------------
+app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
+  const cardId = req.params.cardId;
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).json({ error: "No se ha enviado archivo" });
+  }
+
+  try {
+   const bundlr = await getBundlr();
+
+    // Leer archivo
+     const data = await fs.readFile(file.path);
+
+    // Precio y balance en Bundlr
+     const price = await bundlr.getPrice(data.length);
+      const balance = await bundlr.getLoadedBalance();
+
+   console.log("💰 Precio (base units):", price.toString());
+    console.log("💰 Balance cargado:", balance.toString());
+
+     if (balance.lt(price)) {
+        const diff = price.minus(balance).multipliedBy(1.1); // 10% margen
+       const fundAmount = diff.toFixed(0); // ← string entero, sin decimales
+       console.log("⚡ Financiando Bundlr con:", fundAmount.toString());
+        await bundlr.fund(fundAmount);
+    }
+
+   console.log("⬆️ Subiendo a Arweave (con subida on-chain)...");
+const tx = await bundlr.uploader.uploadTransaction(data, {
+  tags: [{ name: "Content-Type", value: "video/mp4" }],
+});
+
+    await tx.sign();
+await tx.upload();
+    
+const arweaveTxId = tx.id; // 👉 ESTE es el tx de Arweave
+const videoUrl = `https://arweave.net/${arweaveTxId}`;
+
+console.log("✅ Vídeo subido. Arweave txId:", arweaveTxId);
+console.log("🌐 URL Arweave:", videoUrl);
+
+    
+
+    // Guardar en Supabase (upsert por card_id)
+     const { error } = await supabase
+       .from("cards")
+       .upsert(
+      { card_id: cardId, video_url: videoUrl, arweave_txid: arweaveTxId },
+          { onConflict: "card_id" }
+      );
+ 
+    if (error) {
+      console.error("Error guardando en Supabase:", error);
       return res.status(500).json({
-        error:
-          "Bundlr no está inicializado. Revisa PRIVATE_KEY y RPC_URL en las variables de entorno.",
+        error: "Subido a Arweave, pero error guardando en Supabase",
       });
     }
 
-    const data = req.file.buffer;
-    console.log(
-      "📹 Recibido vídeo para",
-      cardId,
-      "tamaño",
-      data.length,
-      "bytes"
-    );
-
-    // Precio estimado (opcional)
-    const price = await bundlr.getPrice(data.length);
-    console.log("💰 Precio aproximado:", price.toString());
-
-    // Si es necesario, fundear Bundlr una vez:
-    // await bundlr.fund(price);
-
-    // Subir a Arweave
-    const tx = await bundlr.upload(data, {
-      tags: [{ name: "Content-Type", value: "video/mp4" }],
-    });
-
-    const videoUrl = `https://node1.bundlr.network/${tx.id}`;
-    console.log("✅ Vídeo subido a Arweave:", videoUrl);
-
-    if (!cards[cardId]) {
-      cards[cardId] = {
-        initialVideoUrl: URL_INICIAL_DEFECTO,
-        finalVideoUrl: videoUrl,
-      };
-    } else {
-      cards[cardId].finalVideoUrl = videoUrl;
-    }
-
     res.json({ videoUrl });
-  } catch (err) {
-    console.error("❌ Error al subir el vídeo:", err);
-    res.status(500).json({ error: "Error al subir el vídeo" });
+  } catch (e) {
+    console.error("Error en subida a Arweave:", e);
+    res.status(500).json({ error: "Error subiendo a Arweave" });
+  } finally {
+    // Borrar archivo temporal
+    if (file?.path) {
+      await fs.unlink(file.path).catch(() => {});
+    }
   }
 });
 
-// Arrancar servidor
+// -------------------------
+// ARRANCAR SERVIDOR
+// -------------------------
 const PORT = process.env.PORT || 3000;
-
-initBundlr().then(() => {
-  app.listen(PORT, () => {
-    console.log("🚀 Servidor Vínculo escuchando en el puerto", PORT);
-  });
+app.listen(PORT, () => {
+  console.log("🚀 Backend Vinculo escuchando en puerto", PORT);
 });
