@@ -134,12 +134,14 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
         await bundlr.fund(fundAmount);
     }
 
-      console.log("⬆️ Subiendo a Arweave...");
-console.log("⬆️ Subiendo a Arweave (vía Bundlr)...");
-const tx = await bundlr.upload(data, {
+   console.log("⬆️ Subiendo a Arweave (con subida on-chain)...");
+const tx = await bundlr.uploader.uploadTransaction(data, {
   tags: [{ name: "Content-Type", value: "video/mp4" }],
 });
 
+    await tx.sign();
+await tx.upload();
+    
 const arweaveTxId = tx.id; // 👉 ESTE es el tx de Arweave
 const videoUrl = `https://arweave.net/${arweaveTxId}`;
 
