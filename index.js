@@ -106,6 +106,7 @@ app.get("/card/:cardId", async (req, res) => {
 // -------------------------
 // RUTA: POST /card/:cardId/upload
 // -------------------------
+console.log("📥 Petición recibida...");
 app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
   const cardId = req.params.cardId;
   const file = req.file;
