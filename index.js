@@ -115,48 +115,41 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
   }
 
   try {
-   //! const bundlr = await getBundlr();
+   const bundlr = await getBundlr();
 
     // Leer archivo
-    //! const data = await fs.readFile(file.path);
+     const data = await fs.readFile(file.path);
 
     // Precio y balance en Bundlr
-    //! const price = await bundlr.getPrice(data.length);
-     //! const balance = await bundlr.getLoadedBalance();
+     const price = await bundlr.getPrice(data.length);
+      const balance = await bundlr.getLoadedBalance();
 
-   //! console.log("💰 Precio (base units):", price.toString());
-    //! console.log("💰 Balance cargado:", balance.toString());
+   console.log("💰 Precio (base units):", price.toString());
+    console.log("💰 Balance cargado:", balance.toString());
 
-    //! if (balance.lt(price)) {
-       //! const diff = price.minus(balance).multipliedBy(1.1); // 10% margen
-      //! console.log("⚡ Financiando Bundlr con:", diff.toString());
-       //! await bundlr.fund(diff);
-    //! }
+     if (balance.lt(price)) {
+        const diff = price.minus(balance).multipliedBy(1.1); // 10% margen
+       console.log("⚡ Financiando Bundlr con:", diff.toString());
+        await bundlr.fund(diff);
+    }
 
-     //! console.log("⬆️ Subiendo a Arweave...");
-   //! const tx = await bundlr.upload(data, {
-     //!  tags: [{ name: "Content-Type", value: "video/mp4" }],
-   //! });
-
-     //! const videoUrl = `https://arweave.net/${tx.id}`;
-     //! console.log("✅ Vídeo subido a Arweave:", videoUrl);
+      console.log("⬆️ Subiendo a Arweave...");
+    const tx = await bundlr.upload(data, {
+       tags: [{ name: "Content-Type", value: "video/mp4" }],
+    });
+    console.log("RESPUESTA DE ARWEAVE:", tx);
+      const videoUrl = `https://arweave.net/${tx.id}`;
+      console.log("✅ Vídeo subido a Arweave:", videoUrl);
+    
 
     // Guardar en Supabase (upsert por card_id)
-    //! const { error } = await supabase
-     //!  .from("cards")
-     //!  .upsert(
-     //!    { card_id: cardId, video_url: videoUrl },
-  //!        { onConflict: "card_id" }
-//!      );
-  const videoUrl = "https://nuestrovinculoespecial-gif.github.io/nuestraweb/comunionvideo.mp4";
-
-  const { data, error } = await supabase
-   .from("cards")
-    .upsert(
-      { card_id: cardId, video_url: videoUrl },
-      { onConflict: "card_id" }
-    )
-    .select();
+     const { error } = await supabase
+       .from("cards")
+       .upsert(
+         { card_id: cardId, video_url: videoUrl },
+          { onConflict: "card_id" }
+      );
+ 
     if (error) {
       console.error("Error guardando en Supabase:", error);
       return res.status(500).json({
