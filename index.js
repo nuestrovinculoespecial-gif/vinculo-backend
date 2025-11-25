@@ -135,19 +135,24 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
     }
 
       console.log("⬆️ Subiendo a Arweave...");
-    const tx = await bundlr.upload(data, {
-       tags: [{ name: "Content-Type", value: "video/mp4" }],
-    });
-    console.log("RESPUESTA DE ARWEAVE:", tx);
-      const videoUrl = `https://node1.bundlr.network/${tx.id}`;
-      console.log("✅ Vídeo subido a Arweave:", videoUrl);
+console.log("⬆️ Subiendo a Arweave (vía Bundlr)...");
+const tx = await bundlr.upload(data, {
+  tags: [{ name: "Content-Type", value: "video/mp4" }],
+});
+
+const arweaveTxId = tx.id; // 👉 ESTE es el tx de Arweave
+const videoUrl = `https://arweave.net/${arweaveTxId}`;
+
+console.log("✅ Vídeo subido. Arweave txId:", arweaveTxId);
+console.log("🌐 URL Arweave:", videoUrl);
+
     
 
     // Guardar en Supabase (upsert por card_id)
      const { error } = await supabase
        .from("cards")
        .upsert(
-         { card_id: cardId, video_url: videoUrl },
+      { card_id: cardId, video_url: videoUrl, arweave_txid: arweaveTxId },
           { onConflict: "card_id" }
       );
  
