@@ -35,7 +35,7 @@ let bundlr;
 async function initBundlr() {
   try {
     const privateKey = process.env.PRIVATE_KEY;
-    const rpcUrl = process.env.RPC_URL;
+    const rpcUrl = process.env.POLYGON_RPC_URL;
 
     if (!privateKey || !rpcUrl) {
       console.warn(
