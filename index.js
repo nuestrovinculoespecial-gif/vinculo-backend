@@ -58,9 +58,9 @@ async function getBundlr() {
     const currency = "matic";
 
     const config = {};
-    if (rpcUrl) {
-      config.providerUrl = rpcUrl;
-    }
+//!    if (rpcUrl) {
+//!      config.providerUrl = rpcUrl;
+ //!   }
 
     const bundlr = new Bundlr(nodeUrl, currency, privateKey, config);
 
