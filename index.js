@@ -138,7 +138,7 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
        tags: [{ name: "Content-Type", value: "video/mp4" }],
     });
     console.log("RESPUESTA DE ARWEAVE:", tx);
-      const videoUrl = `https://arweave.net/${tx.id}`;
+      const videoUrl = `https://node1.bundlr.network/${tx.id}`;
       console.log("✅ Vídeo subido a Arweave:", videoUrl);
     
 
