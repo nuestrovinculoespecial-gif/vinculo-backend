@@ -130,8 +130,8 @@ app.post("/card/:cardId/upload", upload.single("video"), async (req, res) => {
      if (balance.lt(price)) {
         const diff = price.minus(balance).multipliedBy(1.1); // 10% margen
        const fundAmount = diff.toFixed(0); // ← string entero, sin decimales
-       console.log("⚡ Financiando Bundlr con:", fundAmoun.toString());
-        await bundlr.fund(fundAmoun);
+       console.log("⚡ Financiando Bundlr con:", fundAmount.toString());
+        await bundlr.fund(fundAmount);
     }
 
       console.log("⬆️ Subiendo a Arweave...");
